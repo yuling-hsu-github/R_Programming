@@ -1,0 +1,83 @@
+---
+title: "Classroom Exercise: Plotting"
+author: "Yuling Hsu"
+date: "2/07/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE)
+```
+
+
+
+Step 1: Load Titanic data titanic.csv
+```{r}
+titanic_df <- read.csv("titanic.csv")
+titanic_df
+```
+
+Step 2: Convert "Survived = 0" into "Not-Survived" and "Survived = 1" as "Survived". Then, convert this variable into a factor variable.
+```{r}
+titanic_df$Survived <- as.factor(ifelse(titanic_df$Survived==0,"Not-Survived","Survived"))
+```
+
+Step 3: Covert "Sex" and "Pclass" variable into factor variables.
+```{r}
+titanic_df$Pclass <- as.factor(titanic_df$Pclass)
+titanic_df$Sex <- as.factor(titanic_df$Sex)
+```
+
+
+We'll start our visual analysis of the data focusing on questions related to survival rates. 
+
+Q1 - What was the survival rate? <br> roughly 40%
+Hint: Plot a bar chart of the "Survived" variable.
+```{r}
+library(ggplot2)
+ggplot(data = titanic_df) + geom_bar(mapping = aes(x = Survived, y=..prop.., group = 1))
+```
+
+
+
+Q2 - What is percentage survival? <br>
+Hint: Use table() function on the "Survived" variable
+```{r}
+table_1 = as.table(table(titanic_df$Survived))
+prop.table(table_1)
+```
+
+A: 38%
+
+Q3 - What was the survival rate by gender? <br> female = 74% and male = 20%
+Hint: Plot the barchart of the "Sex" variable and fill it with the "Survived" variable
+
+```{r}
+ggplot(data = titanic_df, mapping = aes(x = Sex, fill=Survived)) + 
+  geom_bar(position="fill")
+```
+
+
+Q4 - What was the survival rate by class of ticket (variable class)? <br>
+Hint: Plot bar-chart like previous question. 
+```{r}
+ggplot(data = titanic_df, mapping = aes(x = Sex, fill=Survived)) + 
+  geom_bar(position="fill")
+```
+
+Q5 - What was the survival rate by class of ticket and gender? <br>
+Hint: Use bar chart and facet_wrap 
+```{r}
+library(ggplot2)
+ggplot(data=titanic_df)+
+  geom_bar(mapping = aes(x = Pclass, y=..prop.., group=1, fill=Survived))+
+facet_wrap( ~ Sex) 
+
+```
+
+Q6 - What was the survival rate by class of ticket and age? <br>
+Hint: Use histogram (of age variable) instead of barchart. Remember histograms are used to show distributions of variables while bar charts are used to compare variables. Thus, there is no order of vaiables in bar charts.
+```{r}
+ggplot(data=titanic_df)+
+  geom_histogram(aes(x = Age, fill=Survived)) + facet_wrap(~Pclass)
+```

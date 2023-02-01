@@ -1,0 +1,93 @@
+---
+title: "Handling_Missing_Values"
+author: "Yu Ling Hsu"
+output: html_document
+Date: '2023-01-23'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load data file melb_data.csv
+```{r}
+Melbourne_data <- read.csv("melb_data.csv") 
+head(Melbourne_data)
+```
+
+Visualizing Missing Values:
+```{r}
+library(VIM)
+library(mice)
+names(Melbourne_data)
+
+# Renaming variables to smallers size names to make them fit in the figure
+names(Melbourne_data)[15] <- "BldgArea" 
+names(Melbourne_data)[17] <- "CunclArea"
+names(Melbourne_data)[20] <- "RgnNam"
+names(Melbourne_data)[21] <- "PrpCnt"
+```
+
+Q.1 Create a new dataset (give it a new name "Melb_All_Missing_dropped") by removing all the missing values in Melbourne_data. 
+Hint: Use na.omit()
+```{r}
+Melb_All_Missing_dropped <- na.omit(Melbourne_data)
+Melb_All_Missing_dropped
+```
+
+
+Q.2 Calculate the percentage of datapoints dropped. 
+Hint: Use nrow() to calculate the number of rows (datapoints) in a dataset.
+```{r}
+ndrop <- nrow(Melb_All_Missing_dropped) #put into a variable
+norigin <- nrow(Melbourne_data) #put into a variable
+percentage = ((norigin - ndrop) / norigin) * 100 #*100 cause want to become a precentage
+percentage
+#49 is more than the half, is better to use some function to keep the data
+```
+
+We see that about half (49.7%) of the data has been deleted. It can be a problem if you don't have a lot of data points.  
+
+Now let's delete the variables that have most of the missing values. Find which variables have large number of missing values.
+
+
+Q.3 Write code for visulaizing missing values using md.pattern(), aggr() and matrixplot() functions. 
+Identify the variables that have most missing values. 
+```{r}
+md.pattern(Melbourne_data, rotate.names = TRUE) #rotate.name to see the name clearly
+aggr(x = Melbourne_data)
+matrixplot(x = Melbourne_data)
+```
+We see that the variables *BldgArea* and *YearBuilt* have large number of missing values. If these variable are not critical to our analysis, we can remove them. Let's remove them and see what percentage of data is deleted.
+
+Q.4. Create a copy of Melbourne_data (name the copy as Melbourne_data_Var_dropped) and remove variable "BldgArea" and "YearBuilt" from it. 
+```{r}
+Melbourne_data_Var_dropped = Melbourne_data[,!(names(Melbourne_data) %in% c("BldgArea","YearBuilt"))]
+```
+
+Q.5. Remove all the missing values from Melbourne_data_Var_dropped and name the new dataframe as "Melb_All_Missing_dropped"
+```{r}
+Melb_All_Missing_dropped <- na.omit(Melbourne_data_Var_dropped)
+```
+
+Q.6. Calculate the percentage of datapoints dropped in the previous question. 
+```{r}
+final_persentage = ((nrow(Melbourne_data) - nrow(Melb_All_Missing_dropped)) / nrow(Melbourne_data)) * 100
+final_persentage
+```
+We see that now only 0.45% of data is deleted.
+
+# Instead of dropping rows with missing values, replace with mean. 
+Q.7 Take the data Melbourne_data_Var_dropped (the one after dropping variables "BldgArea" and "YearBuilt"), and replace missing values in variable "Car" by its mean.
+```{r}
+car_mean <- mean(Melbourne_data_Var_dropped$Car, na.rm = TRUE)
+car = Melbourne_data_Var_dropped$Car[is.na(Melbourne_data_Var_dropped$Car)] <- car_mean #replace NA with mean and put into variable
+car
+```
+
+Q.8 Test if the data now has any missing values.
+Hint: Write code for finding the total number of missing values.
+```{r}
+sum(is.na(Melbourne_data_Var_dropped)) #is.na to make sure if there's still missing value
+```
+
