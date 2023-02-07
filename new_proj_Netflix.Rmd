@@ -1,0 +1,167 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+```{r}
+netflix <- read.csv("netflix_titles.csv")
+```
+
+```{r}
+#Check data types
+str(netflix)
+netflix
+```
+```{r}
+#Change data 
+netflix$type <- as.factor(netflix$type)
+netflix$date_added <- mdy(netflix$date_added)
+netflix
+```
+
+```{r}
+netflix= netflix
+netflix$release_year <- parse_date_time(netflix$release_year,'y')
+netflix
+```
+
+
+
+```{r}
+#Cleaning Missing Values
+
+netflix$director[netflix$director==""] <- NA
+netflix$cast[netflix$cast==""] <- NA
+netflix$country[netflix$country==""] <- NA
+netflix$rating[netflix$rating==""] <- NA
+
+netflix$director[which(is.na(netflix$director))] <- "Missing Values"
+netflix$cast[which(is.na(netflix$cast))] <- "Missing Values"
+netflix$country[which(is.na(netflix$country))] <- "Missing Values"
+netflix$date_added[which(is.na(netflix$date_added))] <- "01-01-01" #because the date_added column has a date data type
+netflix$rating[which(is.na(netflix$rating))] <- "Missing Values"
+colSums(is.na(netflix))
+
+netflix
+```
+```{r}
+top_country <- netflix %>% group_by(country) %>% count() %>% arrange(desc(n))
+top10_country <- top_country %>% filter(n>150)
+
+top10_country
+ggplot(top10_country, aes(x = reorder(country, n), y = n)) + 
+  geom_bar(stat = "identity", fill = "red") + 
+  coord_flip() +
+  ylab('TOP Country')+
+  xlab('Count')+
+  theme_minimal()+
+  theme(plot.title = element_text(face="bold",hjust = 0.5)) + 
+  labs(title="Top Country Comparision") + facet_wrap(~country)
+
+```
+
+```{r}
+netflix <- netflix %>% select(,c(-"show_id",-"director",-"cast",-"country",-"description"))
+
+head(netflix,10)
+```
+
+```{r}
+netflix <- netflix %>% separate(listed_in, c("category", "category2", "category3"), sep = ",")
+netflix
+```
+
+```{r}
+netflix <- netflix %>% select(c(-"category2", -"category3"))
+
+netflix
+```
+
+```{r}
+netflix$year_added <- year(netflix$date_added)
+netflix$month_added <- month(netflix$date_added,label=T)
+head(netflix,10)
+```
+
+```{r}
+summary(netflix)
+```
+
+```{r}
+netflix
+```
+
+```{r}
+ggplot(netflix, mapping = aes(x=release_year, fill = type)) +
+  geom_histogram()+
+  labs(title="Netflix Films Released by Year", x="Release Year", y="Total Film")+
+  scale_fill_manual(values = c("Movie" = "Red","TV Show" = "Black"))+
+  theme_minimal()+
+  theme(plot.title = element_text(face="bold",hjust = 0.5))
+```
+
+```{r}
+top_categories <- netflix %>% group_by(category) %>% count() %>% arrange(desc(n))
+top10_categories <- top_categories %>% filter(n>270)
+
+top10_categories
+```
+```{r, Top Ten Categries Comparision}
+ggplot(top10_categories, aes(x = reorder(category, n), y = n)) + 
+  geom_bar(stat = "identity", fill = "red") + 
+  coord_flip() +
+  ylab('Count')+
+  xlab('Top Ten Categories')+
+  theme_minimal()+
+  theme(plot.title = element_text(face="bold",hjust = 0.5)) + 
+  labs(title="Top Ten Categories Comparision")
+```
+```{r, Added New Show In Neflix}
+top_month_added <- netflix %>% group_by(month_added) %>% count() %>% arrange(desc(n))
+top_month_added
+
+ggplot(top_month_added, aes(x = month_added, y = n, group = 1)) + 
+  geom_line(size = 1.05) + ylab('Count') + xlab('Month') + 
+  theme_minimal()+
+  theme(plot.title = element_text(face="bold",hjust = 0.5)) + 
+  labs(title="Added New Show In Neflix")
+
+```
+```{r, movie_mintute}
+netflix1 <- netflix %>% separate(duration, c("Min", "Time"), sep = " ")
+netflix1$Min <- as.integer(netflix1$Min)
+
+```
+```{r}
+Movie_analysis = netflix1 %>% filter(type == 'Movie') 
+TV_analysis = netflix1 %>% filter(type == 'TV Show') 
+
+```
+```{r}
+ggplot(Movie_analysis, aes(x = category, y = Min)) + geom_boxplot(color = 'red')+ 
+  coord_flip()
+```
+```{r,covid_effective}
+pandemiceffect <- netflix %>% group_by(year_added)  %>% count(month_added) 
+pandemiceffect2016 <- pandemiceffect %>% filter(year_added>=2016 && year_added<2021)
+
+ggplot(pandemiceffect2016, aes(x = month_added, y = n))+ geom_bar(stat='identity', fill = "red") + facet_wrap(~year_added) + coord_flip() + ylab('Month') + xlab('Number')
+```
+
