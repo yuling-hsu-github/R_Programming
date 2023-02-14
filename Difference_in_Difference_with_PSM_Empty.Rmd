@@ -1,0 +1,93 @@
+---
+title: "Regression_Diagnostics_Exercise"
+author: "Yuling Hsu"
+date: '2023-02-13'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Data: Effect of a raise in minimum wages on employment.
+
+Conventional economic theory suggests that in a labour market with perfect competition an increase in the minimum wage leads to an increase in unemployment. In April 1992, the U.S. state of New Jersey (NJ) raised the minimum wage from \$4.25 to \$5.05. Card and Krueger (1994) use a DiD approach and show that this *increase in minimum wages* led to an *increase in employment* in the sector of fast food restaurants. The control group in their setting is the neighbouring U.S. state of Pennsylvania (PA), which was not subject to this policy change The authors conducted a survey before and after the raise of the minimum wage with a representative sample of fast food restaurants in NJ and PA. This setting can be regarded as quasi experimental, as both states are not identical in many aspects and the legislative procedure, in order the raise the minimum wage, was not initiated at random.
+
+Ref: Card, David, and Alan B. Krueger. 1994. “Minimum Wages and Employment: A Case Study of the Fast-Food Industry in New Jersey and Pennsylvania.” The American Economic Review 84 (4): 772–93.
+
+Load Data set
+```{r}
+card_krueger_1994_mod_data <- read.csv("card_krueger_1994.csv")
+```
+
+Q.1. Remove missing values from variables "empft", "emppt", "hrsopen".
+Hint: Use filter() function (Refer to "Data Slicing and Dicing.RMD" lecture code.)
+```{r}
+library(dplyr)
+df_filtered <- card_krueger_1994_mod_data %>% 
+  filter(!is.na(empft), !is.na(emppt), !is.na(hrsopen))
+```
+
+Q.2 Run the following linear regression model: "inctime = empft + emppt + hrsopen" using the above data.
+```{r}
+fit <- lm(inctime ~ empft + emppt + hrsopen, data = df_filtered)
+summary(fit)
+```
+
+Q.3. Run regression diagnostic to ensure that regression is satisfying all the assumptions of OLS.
+```{r, r_regression.diagnostic}
+#checking diagnostic plots
+par(mfrow=c(2,2)) # Show plots in 2x2 grid.
+plot(fit)
+```
+
+Q.4. Which assumption of OLS seems to be violated according to the plots of regression diagnostics (answer in plain english, no code).
+Answer: 
+
+Normal Q-Q plot: This plot compares the distribution of residuals to a normal distribution. If the plot shows a deviation from a straight line, it suggests that the normality assumption is violated.
+
+Scale-Location plot: This plot shows the relationship between the square root of the standardized residuals and the fitted values. If the plot shows a pattern, it suggests that the homoscedasticity assumption is violated.
+
+Q.5 Run a difference-in-difference model using "emptot" as y variable and "treated" as the treatment variable and "time" as the time variable. 
+```{r}
+fit_dd = lm(emptot ~ time + treated + treated * time, data = df_filtered)
+summary(fit_dd)
+fit_dd
+```
+
+Q.6 Generate a matched data using Propensity Score Matching (by macthing the propensity to be treated). Use the following variables for matching: empft, emppt, hrsopen, inctime
+```{r}
+library(MatchIt)
+library(lmtest)
+library(sandwich)
+
+df_filtered <- df_filtered %>% 
+  filter(!is.na(inctime), !is.na(emppt))
+
+sum(is.na(df_filtered$empft))
+
+match_obj <- matchit(treated ~ empft + emppt + hrsopen + inctime,
+  data = df_filtered, 
+  method = "nearest", # "nearest" for nearest neighbor matching
+  distance ="glm", # name of a method of estimating propensity scores (e.g., "glm")
+  ratio = 1, # ratio: how many control units should be matched to each treated unit 
+  replace = TRUE) # replace: whether matching should be done with replacement (TRUE)
+?matchit
+summary(match_obj)
+
+plot(match_obj, type = "jitter", interactive = FALSE)
+
+#Extract the matched data and save the data into the variable matched_data
+matched_data <- match.data(match_obj)
+```
+
+Q.7. Run the difference-in-difference model on the matched data.
+```{r}
+didreg1 = lm(emptot ~ time + treated + treated * time, data = matched_data)
+summary(didreg1)
+```
+
+Q.8. What difference do you notice in result of difference-in-difference with and without propensity score matching?
+Answer (only in plain english): 
+p-value is higher and R-squared is much small on difference-in-difference with propensity score matching. The differences between Max and Min also become larger on difference-in-difference with propensity score matching.
