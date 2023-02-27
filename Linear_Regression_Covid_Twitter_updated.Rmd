@@ -1,0 +1,100 @@
+---
+title: "Linear Regression - Covid_Twitter"
+author: "Yu Ling Hsu"
+date: "2/21/2022"
+output: html_document
+---
+```{r}
+##install.packages("leaps")
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(caret)
+library(leaps)
+library(car)#to vif function
+```
+
+
+# We will use "Covid_Twitter_Sample.csv" data for this exercise. This data is a dataset about help seeking tweets during covid-19 pandemic. Each row corresponds to a particular tweet.
+
+# Meaning of a few important variables
+* reply_count: Number of replies to a tweet
+* followers_count: Number of followers of the person tweeting
+* friends_count: Number of people followed by the person who has tweeted
+* hashtags_count: Number of hashtags in the tweet
+* celebrity: Is the tweet coming from a celebrity?
+
+
+Load Data
+```{r}
+tweets_df <- read.csv("Covid_Twitter.csv")
+# Use these variables as x_variables:
+x_var <- c("followers_count", "friends_count", "hashtags_count", "mentions_count", "urls_count", "media_count", "tweet_polarity", "tweet_subjectivity", "celebrity")
+y_var <- 'reply_count'
+
+length(x_var)
+```
+
+
+Q.1. Run a linear regression model using "reply_count" as y-variable and above mentioned x_var as x-variables.
+```{r}
+model <- lm(formula = paste(y_var, "~", paste(x_var, collapse = "+")), data = tweets_df)
+summary(model)
+```
+
+Q.2. Write code to obtain variance inflation factor (VIF) of the above linear regression model. Does any variable have VIF higher than 4?
+Hint: Use function vif()
+```{r, eval = TRUE}
+#no there's no varaible have VIF higher than 4
+vif_values <- vif(model)
+any(vif_values > 4)
+```
+
+Q.3. Run an exhaustive subset selection model on variables in "x_var". If we want to include only one x-variable in the regression, which variable should it be?
+Hint: Use function regsubsets()
+Use nvmax=length(x_var) to try all possible combinations of x variables. 
+```{r}
+model2 <- regsubsets(formula(paste(y_var, paste(x_var, collapse="+"), sep="~")), data = tweets_df, nvmax = length(x_var))
+summary(model2)
+```
+
+Q.4. Obtain adjusted R-Squared values of each model in the above subset selection. 
+```{r}
+rsquared_values <- summary(model2)$adjr2
+rsquared_values
+```
+
+Q.5. Plot adjusted R-Squared vs number of variables.
+```{r}
+plot(1:length(rsquared_values), rsquared_values, xlab = "Number of Variables", ylab = "Adjusted R-squared")
+```
+
+Q.6. Write code to identify the number of variables where adjusted R-Squared is maximum. 
+```{r}
+max_rsquared <- which.max(rsquared_values) + 1
+max_rsquared
+```
+
+
+Q.7. According to the answer of the above question, which x-variables should not be included in the final regression (no need to write code for this)? 
+Answer: 
+Adjusteed R-square decreased in Number of Variables 7.This plot also confirms that using a 7-variable model is the best one.
+
+Q.8. Plot the box-plot of the variables that should not be included in the final regression. 
+```{r}
+library(ggplot2)
+library(reshape2)
+boxplot(tweets_df$tweet_subjectivity)
+boxplot(tweets_df$mentions_count)
+boxplot(tweets_df$urls_count)
+```
+
+
+Q.9. Since "reply_count" is a count variable, run a poisson regression (between "reply_count" and variables in x_var). 
+```{r}
+# Fit a Poisson regression model
+model <- glm(formula = paste(y_var, "~", paste(x_var, collapse = "+")), data = tweets_df, family = "poisson")
+model
+```
