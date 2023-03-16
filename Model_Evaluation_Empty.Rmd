@@ -1,0 +1,146 @@
+---
+title: "Model_Evaluation_In_class_exercies"
+author: "Yuling Hsu"
+date: "9/27/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Load file UniversalBank.csv
+```{r}
+bank<-read.csv("UniversalBank.csv")
+bank <- data.frame(bank)
+```
+
+
+Q.1 Drop ID and zip code columns.
+```{r}
+bank <- subset(bank, select = -c(ID, ZIP.Code))
+```
+
+Q.2. Convert education level 1,2,3 to "Undergrad", "Graduate", "Advanced" respectively. 
+Hint: Use factor() function and levels = c(1,2,3), labels = c("Undergrad", "Graduate", "Advanced").
+```{r}
+bank$Education <- factor(bank$Education , levels = c(1, 2, 3), labels = c("Undergrad", "Graduate", "Advanced"))
+head(bank, 5)
+```
+
+Q.3. partition data in training and test data: 60/40 split (60% training and 40% test)
+```{r}
+library(caret)
+train_index <- sample(c(TRUE, FALSE), nrow(bank), replace=TRUE, prob=c(0.6,0.4))
+train_data <- bank[train_index, ]
+test_data <- bank[-train_index, ]
+head(train_data, 5)
+head(test_data, 5)
+```
+
+Q.4. Run logistic regression to predict "Personal.Loan". 
+Hint: Use train() with method = "glm" to fit a logistic regression.
+```{r}
+logit.reg <- train(factor(Personal.Loan) ~ ., data = train_data, method = "glm") 
+```
+
+Q.5. Predict using logistic regression and obtain the prediction probabilities. 
+Hint: Use predict() function (with type = "prob" to get the classification probabilities).
+```{r}
+logit.reg.pred <- predict(logit.reg, test_data,type = "prob")
+head(logit.reg.pred, 5)
+logit.reg.pred <- logit.reg.pred$'1'
+```
+
+Q.6. Obtain gain value using predicted values in previous question.
+Hint: Use gains() function of "gains" library. Order of arguments: (actual_class,prediction_prob)
+```{r}
+library(gains)
+gain <- gains(test_data$Personal.Loan, logit.reg.pred)
+head(gain, 5)
+```
+
+Q.6a. How many deciles should the bank target, if the bank wants to capture all the customers who can potentially apply for a loan? Write the R-code to answer this question.
+Hint: Use which() function to find where gain_value$cume.pct.of.total == 1
+```{r}
+Best_Threshold_Index <- which(gain$cume.pct.of.total == 1)
+Best_Threshold_Index
+```
+
+
+Q.7. What fraction of people have personal loan in the data.
+```{r}
+library(plyr)
+dim(bank$Personal.Loan)
+mean(bank$Personal.Loan==1)
+```
+
+Q.8. Plot lift chart (Cumulative Percentage of Total Response vs Cumulative Observations).
+Hint: Use plot() function 
+```{r}
+gain <- gains(test_data$Personal.Loan, logit.reg.pred)
+plot(c(0,gain$cume.pct.of.total)~c(0,gain$cume.obs), 
+     xlab="# cases", ylab="Cumulative", main="", type="l")
+lines(c(0,1)~c(0, dim(test_data)[1]), lty=2) # lty: Line type (=2 means dashed line).
+```
+
+Q.9. Plot decile-wise chart.
+Hint: Height of each decile is the folowing ratio: mean.resp/overall mean.
+```{r}
+heights <- gain$mean.resp/mean(test_data$Personal.Loan)
+midpoints <- barplot(heights, names.arg = gain$depth, ylim = c(0,9), 
+                     xlab = "Percentile", ylab = "Mean Response", main = "Decile-wise lift chart")
+
+```
+
+### ROC Curve:
+
+Q.10. Load data: "ownerExample.csv". The data contains two columns: (i) Class (owner/non-owner), (ii) Probability (of owner). The variable "Probability" contains the probability that the true class is "owner" (assume that these probabilities have been otbained by running some model). The "Class" variable in the data contains the true class (owner/nonowner).  
+i. Use the data and a cutoff of 0.75 to predict owner (Prob>0.75 is owner). Hint: Use ifelse() function.
+
+```{r}
+ownerex<-read.csv("ownerExample.csv")
+df <- data.frame(ownerex)
+
+df_pred_075 <-as.factor(ifelse(df$Probability>0.75,"owner","nonowner"))
+head(df_pred_075, 5)
+```
+ii. Obtain confusiontMatrix. Hint: Use confusionMatrix() funciton of "caret" package. Argument order: (predicted, actual)
+```{r}
+library(caret)
+df$Class <- factor(df$Class, levels = c("owner", "nonowner"))
+confusionMatrix(df_pred_075, df$Class)
+```
+
+iii. Repeat the above exercise with cutoffs 0.25 and 0.5
+```{r}
+df_pred_025 <- factor(ifelse(df$Probability > 0.25, "owner", "nonowner"), levels = c("owner", "nonowner"))
+df_pred_050 <- factor(ifelse(df$Probability > 0.5, "owner", "nonowner"), levels = c("owner", "nonowner"))
+
+# Cutoff = 0.25
+conf_mat_025 <- confusionMatrix(df_pred_025, df$Class)
+# Cutoff = 0.5
+conf_mat_050 <- confusionMatrix(df_pred_050, df$Class)
+```
+
+Q.11. Obtain Roc curve. 
+Hint 1: Use roc() function library "pROC". Order of arguments: (actual_class, probability). 
+Hint 2: Use plot.roc() to plot (load packages "e1071" and "pROC").
+```{r}
+library(pROC)
+library(e1071)
+roc_curve <- roc(df$Class, df$Probability)
+plot.roc(roc_curve)
+auc(roc_curve)
+```
+
+
+Q.12 Calculate the best cutoff that maximizes the sum of sensitivities and specificities.
+```{r}
+Total <- roc_curve$sensitivities + 5*roc_curve$specificities # If specificity is 5 times more important
+Best_Threshold_Index <- which(Total == max(Total))
+Best_Cutoff <- roc_curve$thresholds[Best_Threshold_Index]
+Best_Cutoff
+```
+
