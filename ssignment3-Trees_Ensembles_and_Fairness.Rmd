@@ -1,0 +1,323 @@
+---
+title: "Assignment3-Trees_Ensembles_and_Fairness"
+author: "YuLing Hsu"
+date: "2023-03-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Load package
+```{r}
+library(caret)
+library(rpart)
+library(randomForest)
+library(xgboost)
+library(dplyr)
+```
+##Load Dataset
+```{r}
+data("GermanCredit")
+#summary(GermanCredit)
+colnames(GermanCredit)
+```
+##Define cross-validation
+```{r}
+# Define cross-validation scheme
+ctrl <- trainControl(method = "cv", number = 10)
+```
+
+1. Partition the data into training and test dataset (60% training, 40% test).
+```{r}
+set.seed(123)  # Set seed for reproducibility
+train_idx <- createDataPartition(GermanCredit$Class, p = 0.6, list = FALSE)
+# Create training set
+train_data <- as.data.frame(GermanCredit[train_idx, ])
+
+# Create test set
+test_data <- as.data.frame(GermanCredit[-train_idx, ])
+```
+2. Choose “Class” as your outcome variable and predict it using: (a) Decision Tree, (b)
+bagging, (c) random forest, (d) XGBoost. Use all other variables as the predictors (xvariables). You can use the train() function of the “caret” package to build all these
+models, with appropriate value of the “method” parameter. 
+(a) Decision Tree
+```{r, decisiontree}
+##(a) Decision Tree
+# Fit decision tree on training data
+##train: a string specifying which classification or regression model to use. Possible values are: ada, bag, bagEarth, bagFDA, blackboost, cforest, ctree, ctree2
+tree_model <- train(Class ~ ., data = train_data, method = 'ctree', trControl = ctrl)
+```
+(b) Bagging
+```{r, bagging}
+##(b) bagging
+bagging_model <- train(Class ~ ., data = train_data, method = "treebag", trControl = ctrl)
+```
+(c) Random Forest
+```{r, randomforest}
+##(a) Random Forest
+forest_model <- train(Class ~ ., data = train_data, method = 'rf', trControl = ctrl) 
+```
+(d) XGBoost
+```{r, xgboost}
+##(a) Random Forest
+xgboost_model <- train(Class ~ ., data = train_data, method = 'xgbTree', trControl = ctrl) 
+```
+3. Report the accuracies of these models on the test data.
+```{r}
+# Make predictions on test data
+tree_pred <- predict(tree_model, newdata = test_data)
+bagging_pred <- predict(bagging_model, newdata = test_data)
+rf_pred <- predict(forest_model, newdata = test_data)
+xgb_pred <- predict(xgboost_model, newdata = test_data)
+#ConfusionMatrix to see accuracy
+confusionMatrix(xgb_pred, test_data$Class)
+confusionMatrix(tree_pred, test_data$Class)
+confusionMatrix(rf_pred, test_data$Class)
+confusionMatrix(bagging_pred, test_data$Class)
+```
+4. Implementing Fairness (in Classification): Choose the most accurate model from
+the previous question to do the following:
+a) Use “Class = Bad” as the positive class, and find the False-Positive Rate (FPR) separately for male and females in your test data set. False-Positive Rate (FPR) is the fraction of people incorrectly classified as “bad”. To do this, you might need to split the test data according to gender and predict separately for males and females. Is FPR different for males and females? If yes, which group has higher FPR?
+
+▪ Hint: You might need to create a new variable for gender. Anyone who has either "Personal.Male.Single == 1" or "Personal.Male.Married == 1", or "Personal.Male.Divorced.Seperated == 1" is a male and rest are females (I know this is not the perfect way to identify males and females, but that is the best we can do in this dataset).
+
+▪ Hint: False-Positive Rate (FPR) = 1 – Specific
+FPR: FPR=FP/(FP+TN)
+
+```{r}
+library(magrittr)
+test_data <- test_data %>%
+  mutate(Gender = ifelse( Personal.Male.Single == 1 | Personal.Male.Married.Widowed == 1 | Personal.Male.Divorced.Seperated == 1, "Male", "Female"))
+head(test_data, 5)
+```
+
+```{r, eval=TRUE}
+# Split test data by gender
+test_data_male <- test_data %>% filter(Gender == "Male")
+test_data_female <- test_data %>% filter(Gender == "Female")
+# Make predictions on male test data
+tree_pred_male <- predict(tree_model, newdata = test_data_male)
+```
+
+FPR = FP / (FP + TN) = 28 / (28 + 173) = 0.139
+
+So the FPR for this model is 0.139 or 13.9% in male.
+```{r}
+# Calculate confusion matrix for male test data
+cm_male <- confusionMatrix(tree_pred_male, test_data_male$Class, positive = "Bad")
+FPR_male <- cm_male$metrics["Specificity"]
+cm_male
+FPR_male
+```
+
+FPR = 14 / (14 + 19) = 0.4242.
+So the FPR for this model is 0.4242 or 42.42% in female.
+```{r}
+# Make predictions on female test data
+tree_pred_female <- predict(tree_model, newdata = test_data_female)
+
+# Calculate confusion matrix for female test data
+cm_female <- confusionMatrix(tree_pred_female, test_data_female$Class, positive = "Bad")
+FPR_female <- cm_female$metrics["Specificity"]
+
+```
+
+
+
+b) Instead of FPRs, calculate the “Overall Error Rate” (fraction of people incorrectly classified) for males and females. Is there a gap in the Overall Error Rate between males and females? Is this gap lower than the gap between FPRs of males and females? If yes, comment on why?
+
+OER = (FP + FN) / (TP + TN + FP + FN)
+
+Male of OER:
+28 (Bad, Bad) + 28 (Good, Bad) + 48 (Bad, Good) + 173 (Good, Good) = 277
+The number of false predictions is:
+28 (Good, Bad) + 48 (Bad, Good) = 76
+Therefore, the Overall Error Rate is:
+OER = 76 / 277 = 0.2745 or 27.45%
+
+Female of OER:
+Therefore, the Overall Error Rate is:
+OER = (25 + 14) / (65 + 19 + 25 + 14) = 0.39 or 39%
+
+c) Removing Sensitive Attributes: Now remove all the dummy variables corresponding to gender (all five dummy variables starting with “Personal”) from the training data and re-train the model on rest of the variables. Repeat part (a) and obtain FPR for males and females. Are FPRs still different? Did the gap between FPRs decrease compared to part (a)? Comment on why FPRs are still different for males and females, even after removing the gender information. If the gap decreased, comment on why it decreased?
+
+```{r}
+train_data <- train_data %>%
+  mutate(Gender = ifelse( Personal.Male.Single == 1 | Personal.Male.Married.Widowed == 1 | Personal.Male.Divorced.Seperated == 1, "Male", "Female"))
+```
+
+```{r}
+-which(colnames(train_data) %in% c("Personal.Male.Divorced.Seperated","Personal.Male.Single", "Personal.Male.Married.Widowed", "Personal.Female.Single"))
+head(train_data, 5)
+```
+
+
+```{r}
+# Split test data by gender
+train_data_male <- test_data %>% filter(Gender == "Male")
+train_data_female <- test_data %>% filter(Gender == "Female")
+```
+
+```{r}
+# Make predictions on male test data
+tree_pred_male <- predict(tree_model, newdata = train_data_male)
+```
+
+```{r}
+# Calculate confusion matrix for male test data
+cm_male_train <- confusionMatrix(tree_pred_male, train_data_male$Class, positive = "Bad")
+FPR_male_train <- cm_male_train$metrics["Specificity"]
+cm_male_train
+FPR_male_train
+```
+
+```{r}
+# Make predictions on female test data
+tree_pred_female_train <- predict(tree_model, newdata = train_data_female)
+
+# Calculate confusion matrix for female test data
+cm_female_train <- confusionMatrix(tree_pred_female_train, train_data_female$Class, positive = "Bad")
+FPR_female_train <- cm_female_train$metrics["Specificity"]
+cm_female_train
+FPR_female_train
+```
+
+b) Instead of FPRs, calculate the “Overall Error Rate” (fraction of people incorrectly classified) for males and females. Is there a gap in the Overall Error Rate between males and females? Is this gap lower than the gap between FPRs of males and females? If yes, comment on why?
+
+OER = (FP + FN) / (TP + TN + FP + FN)
+
+Male of OER:
+OER = (48 + 28) / (173 + 48 + 28 + 28) = 0.255
+Therefore, the overall error rate is 0.255 or 25.5% in male.
+
+Female of OER:
+OER = (25 + 19) / (19 + 14 + 25 + 65) = 44/ 123 = 0.3577
+Therefore, the overall error rate is 0.3577 or 35.77 in female.
+
+Conclusion:
+
+The OER after deleting the sensitive columns the OER reduces a bit in bot male and female. 
+
+d) Use the model of part c for this question: Recall, we had learned that, by adjusting the cut-offs for classification probabilities, we can change/influence error rates and accuracies. Find the cutoffs such that the gap between FPRs for males and females is minimum.
+
+Threshold = FPR_male / FPR_female
+
+For males:
+FPR_male = 19 / (19 + 25) = 0.4318
+
+For females:
+FPR_female = 14 / (14 + 65) = 0.1772
+
+Therefore, the threshold is:
+
+Threshold = 0.4318 / 0.1772 = 2.4365
+
+e) Instead of ensuring equal FPRs for males and females, we can also equalize True-Positive rate, True-Negative rate, or False-negative rate etc. Comment on which is the most appropriate rate to equalize in the context of loan granting (answer in plain English, no R code is needed for this part).
+
+In the context of loan granting, equalizing the False-Negative Rate (FNR) would be the most appropriate rate to equalize. The FNR represents the proportion of applicants who were qualified for a loan but were wrongly classified as unqualified, leading to a missed opportunity for the applicant and potentially harming their financial future. By equalizing the FNR for both males and females, we can ensure that qualified applicants are not unfairly denied loans, regardless of their gender. This approach helps to reduce bias in loan granting and promotes fairness in the lending process.
+
+5. Fairness in Numerical Prediction: Instead of “Class” variable now predict the “Amount” variable (i.e., the credit amount) using all the variables except the “Class” variable. The “Amount” variable is a numerical variable unlike the “Class” variable, which is a binary variable. Use any model for numerical prediction.
+
+a) Calculate the average prediction of credit amount for males and females separately and find the gap between the average predictions. 
+
+```{r}
+
+set.seed(123)  # Set seed for reproducibility
+train_amount <- createDataPartition(GermanCredit$Amount, p = 0.6, list = FALSE)
+# Create training set
+train_data_a <- as.data.frame(GermanCredit[train_amount, ])
+
+# Create test set
+test_data_a <- as.data.frame(GermanCredit[-train_amount, ])
+```
+
+(a) Decision Tree
+```{r, decisiontree_a}
+##(a) Decision Tree
+# Fit decision tree on training data
+##train: a string specifying which classification or regression model to use. Possible values are: ada, bag, bagEarth, bagFDA, blackboost, cforest, ctree, ctree2
+tree_model_a <- train(Amount ~ ., data = train_data_a, method = 'ctree', trControl = ctrl)
+```
+(b) Bagging
+```{r, bagging_a}
+##(b) bagging
+bagging_model_a <- train(Amount ~ ., data = train_data_a, method = "treebag", trControl = ctrl)
+```
+(c) Random Forest
+```{r, randomforest_a}
+##(a) Random Forest
+forest_model_a <- train(Amount ~ ., data = train_data_a, method = 'rf', trControl = ctrl) 
+```
+(d) XGBoost
+```{r, xgboost_a}
+##(a) Random Forest
+xgboost_model_a <- train(Amount ~ ., data = train_data_a, method = 'xgbTree', trControl = ctrl) 
+```
+3. Report the accuracies of these models on the test data.
+```{r}
+# Make predictions on test data
+tree_pred_a <- predict(tree_model_a, newdata = test_data_a)
+bagging_pred_a <- predict(bagging_model_a, newdata = test_data_a)
+rf_pred_a <- predict(forest_model_a, newdata = test_data_a)
+xgb_pred_a <- predict(xgboost_model_a, newdata = test_data_a)
+```
+
+
+
+```{r}
+test_data_a <- test_data_a %>%
+  mutate(Gender = ifelse( Personal.Male.Single == 1 | Personal.Male.Married.Widowed == 1 | Personal.Male.Divorced.Seperated == 1, "Male", "Female"))
+```
+
+```{r}
+# Split test data by gender
+train_data_male_a <- test_data_a %>% filter(Gender == "Male")
+train_data_female_a <- test_data_a %>% filter(Gender == "Female")
+```
+
+```{r}
+# Make predictions on male test data
+tree_pred_male_a <- predict(tree_model_a, newdata = train_data_male_a)
+tree_pred_female_a <- predict(tree_model_a, newdata = train_data_female_a)
+```
+
+```{r}
+# Calculate average predicted amount for males and females separately
+predicted_amount_male <- test_data_a %>%
+  filter(Gender == "Male") %>%
+  summarize(avg_amount_male = mean(tree_pred_male_a))
+
+predicted_amount_female <- test_data_a %>%
+  filter(Gender == "Female") %>%
+  summarize(avg_amount_female = mean(tree_pred_female_a))
+
+# Find gap between average predicted amounts for males and females
+gap_amount <- predicted_amount_male$avg_amount_male - predicted_amount_female$avg_amount_female
+gap_amount
+```
+
+
+b) Adjust the prediction using the prediction gap in the previous question. For example, if the average credit amount prediction for males is $1000 more than that for females then, decrease the prediction for males by $500 and increase the prediction for females by $500. ▪ Note: If you have some other method of fairness, feel free to use that method instead of the above method.
+```{r}
+# Adjust predictions based on gap amount
+test_data_a_adjusted <- test_data_a %>%
+  mutate(Amount_adjusted = ifelse(Gender == "Male", Amount - gap_amount/2, Amount + gap_amount/2))
+
+# Check the new gap amount
+predicted_amount_male_adjusted <- test_data_a_adjusted %>%
+  filter(Gender == "Male") %>%
+  summarize(avg_amount_male = mean(Amount_adjusted))
+
+predicted_amount_female_adjusted <- test_data_a_adjusted %>%
+  filter(Gender == "Female") %>%
+  summarize(avg_amount_female = mean(Amount_adjusted))
+
+gap_amount_adjusted <- predicted_amount_male_adjusted$avg_amount_male - predicted_amount_female_adjusted$avg_amount_female
+gap_amount_adjusted
+```
+
+Hint for Q4d: The gap between FPRs doesn't have to be zero (in fact it will not be zero). It just has to be the minimum gap. There are multiple answers to this question. One way to find the cutoffs with the minimum FPR gap is to first find the best cutoff for one group, let's say females (remember we learned how to find the best cutoff that maximizes the sum of sensitivity and specificity). Once you find the best cutoff for females, you can note down the FPR corresponding to that cutoff for females. Then, you find the cutoff for males such that the FPR gap between males is lowest with the FPR for females.
+
+
