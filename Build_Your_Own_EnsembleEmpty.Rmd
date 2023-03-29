@@ -1,0 +1,154 @@
+---
+title: "Ensemble Learning"
+author: "Yuling Hsu"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Building ensemble of your own
+In this classroom exercise, you will create an ensemble of your own. That is, you will first create individual models and then combine them. Specifically, you will learn that all individual model don't have to be of same type, and you will also learn several methods to combine these models.
+
+Load brest cancer data: wisc_bc_data.csv
+Data Description - This data is about brest cancer diagnostics: https://archive.ics.uci.edu/ml/datasets/breast+cancer+wisconsin+(diagnostic)
+
+```{r}
+wbcd <- read.csv("wisc_bc_data.csv")
+wbcd %>%
+  glimpse()
+```
+
+Note: In all these questions you need to predict "diagnosis" variable.
+
+Q.1 Remove ID variable from the data
+```{r}
+-which(colnames(wbcd) %in% c("id"))
+```
+
+Q.2. Use factor() to replace "B" and "M" by "Benign" and "Malignant" respectively in variable "diagnosis". 
+Hint: Use levels = c("B", "M") and labels = c("Benign", "Malignant") in the factor() function
+```{r}
+
+```
+
+Partition data: 60/40
+```{r}
+set.seed(1)
+train_rows <- sample(row.names(wbcd), length(wbcd$area_mean)*0.6)
+test_rows <- setdiff(row.names(wbcd), train_rows)
+train_data <- wbcd[train_rows,]
+test_data <- wbcd[test_rows,]
+```
+
+Q.3a. Train a knn model: Use train() function with method="knn" for knn
+```{r}
+
+```
+
+Q.3b. Predict using knn model. Use predict() function for this. Use type = "raw".
+```{r}
+
+```
+
+Q.3c. Obtain confusion matrix using confusionMatrix(prediction, truth)
+```{r}
+
+```
+
+Q.4a. Training Decision Tree using train() function with method="rpart"
+```{r}
+
+```
+
+Q.4b. Predicting using Decision Tree model. Use type = "raw".
+```{r}
+
+```
+
+Q.4c. Obtain confusionMatrix(prediction, truth)
+```{r}
+
+```
+
+Q.5a. Training the logistic model train(x,y,method='glm')
+```{r}
+
+```
+
+Q.5b. Predict using logistic
+```{r}
+
+```
+
+Q.5c. Obtain confusionMatrix(prediction, truth)
+```{r}
+
+```
+
+
+Q.6a. Predict classification probabilities for knn, dection tree, and logistic models
+Hint: Use type = "prob" in the predict() function.
+```{r}
+
+```
+
+
+Q.6b. Compute the average of classification probabilities (for Benign class) from above three models (knn, dection tree, and logistic).
+```{r}
+
+```
+
+Q.6c. Predict as "Benign" if Avg_Prob>0.5 otherwise as "Malignant"
+```{r}
+
+```
+
+Q.6d. Obtain confusionMatrix(prediction, truth)
+```{r}
+
+```
+
+Q.7a. Take weighted average (weighted by model accuracies) to create ensembles.
+Hint: Use a code similar to the below code to obtain accuracies of different models.
+confusion_logistic <- confusionMatrix(pred_logistic, test_data$diagnosis)
+logistic_accuracy <- confusion_logistic$overall['Accuracy']
+```{r}
+
+```
+
+Q.7b. Predict as "Benign" if Wtd_Avg_prob>0.5 otherwise as "Malignant"
+```{r}
+
+```
+
+Q.7c. Obtain confusionMatrix(prediction, truth) for prediction using Weighted Average
+```{r}
+
+```
+
+
+Q.8. Instead of taking average of proabilities, use majority vote to predict
+Predict class instead of probability, and convert the class into 0/1 values
+Hint: Convert prediction into 0/1 binary votes and then add votes by different models. Then, predict "Benign" if the number of votes for Benign are >= 2. 
+```{r}
+
+```
+
+Q.8a. Add the votes
+```{r}
+
+```
+
+Q.8b. Predict using majority rule.
+```{r}
+
+```
+
+Q.9. Does ensembling increase accuracy? Which ensembling methods is more accurate, simple averaging, weighted-averaging, or majority-vote?
+Hint: Compare all these accuracies using confusionMatrix()
+```{r}
+
+```
+
