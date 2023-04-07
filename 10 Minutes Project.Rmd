@@ -1,0 +1,498 @@
+---
+title: "10 minutes project - Diabetes"
+author: "YuLing Hsu"
+date: "2023-04-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Package
+```{r}
+library(tidyverse)
+library(caret)
+library(naniar)
+
+```
+
+## Load Dataset
+```{r, read_final_data}
+df <- readr::read_csv("diabetes_binary_5050split_health_indicators_BRFSS2015.csv", col_names = TRUE)
+df %>%
+  glimpse()
+```
+## ReadME
+
+diabetes _ binary _ health _ indicators _ BRFSS2015.csv is a clean dataset of 253,680 survey responses to the CDC's BRFSS2015. The target variable Diabetes_binary has 2 classes. 0 is for no diabetes, and 1 is for prediabetes or diabetes. This dataset has 21 feature variables and is not balanced.
+
+Data Content
+
+"Diabetes_binary"      
+"HighBP: 0 = no high BP 1 = high BP               
+"HighChol": 0 = no high cholesterol 1 = high cholesterol             
+"CholCheck": 0 = no cholesterol check in 5 years 1 = yes cholesterol check in 5 years           
+"BMI"                  
+"Smoker": Have you smoked at least 100 cigarettes in your entire life? [Note: 5 packs = 100 cigarettes] 0 = no 1 = yes 
+"Stroke": (Ever told) you had a stroke. 0 = no 1 = yes               
+"HeartDiseaseorAttack": coronary heart disease (CHD) or myocardial infarction (MI) 0 = no 1 = yes
+"PhysActivity": physical activity in past 30 days - not including job 0 = no 1 = yes         
+"Fruits": Consume Fruit 1 or more times per day 0 = no 1 = yes               
+"Veggies": Consume Vegetables 1 or more times per day 0 = no 1 = yes              
+"HvyAlcoholConsump": Heavy drinkers (adult men having more than 14 drinks per week and adult women having more than 7 drinks per week) 0 = no   
+"AnyHealthcare": Have any kind of health care coverage, including health insurance, prepaid plans such as HMO, etc. 0 = no 1 = yes        
+"NoDocbcCost": Was there a time in the past 12 months when you needed to see a doctor but could not because of cost? 0 = no 1 = yes          
+"GenHlth": Would you say that in general your health is: scale 1-5 1 = excellent 2 = very good 3 = good 4 = fair 5 = poor             
+"MentHlth": Now thinking about your mental health, which includes stress, depression, and problems with emotions, for how            
+"PhysHlth": Now thinking about your physical health, which includes physical illness and injury, for how many days during the past 30             
+"DiffWalk": Do you have serious difficulty walking or climbing stairs? 0 = no 1 = yes             
+"Sex": 0 = female 1 = male                  
+"Age": 13-level age category (_AGEG5YR see codebook) 1 = 18-24 9 = 60-64 13 = 80 or older                 
+"Education": Education level (EDUCA see codebook) scale 1-6 1 = Never attended school or only kindergarten 2 = Grades 1 through 8            
+"Income": Income scale (INCOME2 see codebook) scale 1-8 1 = less than $10,000 5 = less than $35,000 8 = $75,000 or more 
+Data resourse:
+Kaggle: https://www.kaggle.com/datasets/alexteboul/diabetes-health-indicators-dataset?datasetId=1703281&searchQuery=r
+
+##) No missing data
+```{r}
+# Create a plot of missing data and see columns name
+gg_miss_var(df)
+colnames(df)
+```
+From this number we can know even the topest corelation, only 55%, which means the columns don't have specifity relationships.
+```{r}
+corr_matrix <- cor(df)
+# sort correlation matrix in descending order and select top 5
+top_corr <- head(sort(corr_matrix, decreasing = TRUE), 30)
+
+# print top 5 correlations
+print(top_corr)
+
+corr_matrix
+```
+
+
+```{r}
+library(ggplot2)
+library(reshape2)
+
+df1_cor <- cor(df)
+df1_cor_melt <- melt(df1_cor)
+ggplot(df1_cor_melt, aes(Var1, Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "#2c7bb6", high = "#d7191c", mid = "white", midpoint = 0, limit = c(-1, 1), space = "Lab", name="Correlation") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, size = 12, hjust = 1),
+        axis.text.y = element_text(size = 12),
+        axis.title = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_blank(),
+        legend.justification = c(1, 0),
+        legend.position = c(0.86, 0.25),
+        legend.direction = "vertical") +
+  guides(fill = guide_colorbar(barwidth = 10, barheight = 0.5, title.position = "top", title.hjust = 0.5))
+
+```
+There is no obvious correlation between every type,
+
+
+
+```{r}
+# partition
+set.seed(1)  
+train.index <- sample(c(1:dim(df)[1]), nrow(df)*0.7)  
+train.df <- df[train.index, ]
+valid.df <- df[-train.index, ]
+train.df
+valid.df
+```
+
+```{r}
+df %>% 
+  ggplot(mapping = aes(x = Sex)) +
+  geom_bar(fill = "steelblue") +
+  facet_wrap(~Age)
+
+df %>% 
+  ggplot(mapping = aes(x = Education)) +
+  geom_bar(fill = "grey") +
+  facet_wrap(~Income)
+
+df %>% 
+  ggplot(mapping = aes(x = HeartDiseaseorAttack)) +
+  geom_bar(fill = "#9966CC") +
+  facet_wrap(~PhysActivity) +
+  ylab('PhysActivity')
+
+#1 means excercise regularly and less heart attack
+df %>% 
+  ggplot(mapping = aes(x = Income)) +
+  geom_bar(fill = "#5966C9") +
+  facet_wrap(~PhysActivity) +
+  ylab('PhysActivity')
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# calculate proportion and plot bar chart
+df_prop <- df %>% 
+  group_by(HeartDiseaseorAttack, PhysActivity) %>% 
+  summarize(prop = n() / nrow(df))
+
+ggplot(df_prop, aes(x = HeartDiseaseorAttack, y = prop, fill = as.factor(PhysActivity))) +
+  geom_bar(stat = 'identity', position = 'dodge') +
+  ylab('Proportion') +
+  xlab('HeartDiseaseorAttack') +
+  scale_fill_manual(values = c("#9966CC", "steelblue"), name = 'PhysActivity') 
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# create a new data frame with BMI, Diabetes_binary, and count columns
+df_counts <- df %>%
+  group_by(BMI, Diabetes_binary) %>%
+  summarise(count = n())
+
+# plot the counts using ggplot2
+ggplot(df_counts, aes(x = BMI, y = count, fill = as.factor(Diabetes_binary))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("red", "green"), name = "Diabetes") +
+  labs(title = "Relation between BMI and Diabetes") +
+  theme_minimal()
+```
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# create a new data frame with Age, Diabetes_binary, and count columns
+df_counts <- df %>%
+  group_by(Age, Diabetes_binary) %>%
+  summarise(count = n())
+
+# plot the counts using ggplot2
+ggplot(df_counts, aes(x = Age, y = count, fill = as.factor(Diabetes_binary))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("purple", "yellow"), name = "Diabetes") +
+  labs(title = "Relation between Age and Diabetes") +
+  theme_minimal()
+```
+
+
+```{r}
+# create a new data frame with BMI, Diabetes_binary, and count columns
+df_counts <- df %>%
+  group_by(Age, Stroke, PhysActivity) %>%
+  summarise(count = n())
+
+# plot the counts using ggplot2
+ggplot(df_counts, aes(x = Age, y = count, fill = interaction(Stroke, PhysActivity))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("yellow", "blue", "red", "orange"), name = "Stroke and Physical Activity",
+                    labels = c("No Stroke, No PhysActivity", "No Stroke, PhysActivity", "Stroke, No PhysActivity", "Stroke, PhysActivity")) +
+  labs(title = "Relation between Age, Stroke, and Physical Activity") +
+  theme_minimal()
+
+```
+
+
+
+```{r}
+mod1 <- lm(Education ~ Income, data = train.df)
+summary(mod1)
+```
+```{r}
+predictions <- predict(mod1, newdata = valid.df)
+# calculate RMSE
+rmse <- sqrt(mean((valid.df$Education - predictions)^2))
+rmse
+
+mod1  %>% 
+  coefplot::coefplot(intercept = FALSE, color = "darkgreen") +
+  theme(legend.position = 'none')
+```
+```{r}
+mod2 <- lm(Stroke ~ Income + Smoker + PhysActivity, data = train.df)
+summary(mod2)
+predictions <- predict(mod2, newdata = valid.df)
+# calculate RMSE
+rmse <- sqrt(mean((valid.df$Stroke - predictions)^2))
+rmse
+mod2  %>% 
+  coefplot::coefplot(intercept = FALSE, color = "darkgreen") +
+  theme(legend.position = 'none')
+```
+
+
+##) RandomForest Model Test
+```{r}
+library(randomForest)
+library(caret)
+## random forest
+# ?randomForest
+rf <- randomForest(as.factor(Diabetes_binary) ~ ., data = train.df, ntree = 100, 
+                   mtry = 4, nodesize = 5, importance = TRUE)  
+rf
+```
+
+
+
+## variable importance plot
+```{r}
+varImpPlot(rf, type = 1, color = "darkgreen")# type: 1=mean decrease in accuracy, 2=mean decrease in node impurity
+varImpPlot(rf, type = 2, color = "darkgreen")
+```
+```{r}
+rf.pred <- predict(rf, valid.df)
+confusionMatrix(as.factor(rf.pred), as.factor(valid.df$Diabetes_binary), positive = "1") 
+```
+```{r}
+library(randomForest)
+library(caret)
+## random forest
+# ?randomForest
+rf1 <- randomForest(as.factor(GenHlth) ~ ., data = train.df, ntree = 100, 
+                   mtry = 4, nodesize = 5, importance = TRUE)  
+```
+
+
+```{r}
+varImpPlot(rf1, type = 1, color = "darkblue")# type: 1=mean decrease in accuracy, 2=mean decrease in node impurity
+varImpPlot(rf1, type = 2, color = "darkblue")
+```
+
+
+```{r}
+## confusion matrix
+rf1.pred <- predict(rf1, valid.df)
+confusionMatrix(as.factor(rf1.pred), as.factor(valid.df$GenHlth), positive = "1")
+```
+```{r}
+library(randomForest)
+library(caret)
+## random forest
+# ?randomForest
+rf2 <- randomForest(as.factor(HighBP) ~ ., data = train.df, ntree = 100, 
+                   mtry = 4, nodesize = 5, importance = TRUE) 
+rf2.pred <- predict(rf2, valid.df)
+confusionMatrix(as.factor(rf2.pred), as.factor(valid.df$HighBP), positive = "1")
+```
+
+
+
+
+```{r}
+set.seed(1)
+# Enable parallel processing with 4 cores
+library(doParallel)
+cl <- makeCluster(4)
+registerDoParallel(cl)
+
+nn <-
+  neuralnet(
+    Diabetes_binary  ~ HeartDiseaseorAttack + Stroke ,
+    data = train.df,
+    linear.output = FALSE, # linear.output = FALSE indicates that we are predicting categorical output
+    hidden = c(2,3) # Two hidden layers with 2 and 3 nodes respectively.
+   
+  )
+# Stop the parallel processing and clean up
+stopCluster(cl)
+# display weights
+nn$weights
+
+# display predictions
+prediction(nn)
+
+# plot network
+plot(nn)
+```
+
+```{r}
+nn <- neuralnet(
+   Stroke + HeartDiseaseorAttack ~
+    HighBP + HighChol + BMI,
+  data = train.df,
+  hidden = c(2,3), # Run nn with two hidden layers having 2 and 3 nodes respectively.
+  linear.output = FALSE
+)
+# display predictions
+prediction(nn)
+plot(nn)
+```
+
+
+
+
+
+##) Try logical regression
+```{r}
+modA <- glm(Diabetes_binary ~ BMI, data = train.df, family = 'binomial')
+modB <- glm(Diabetes_binary ~ PhysActivity + DiffWalk, data = train.df, family = 'binomial')
+modC <- glm(Diabetes_binary ~ BMI + HvyAlcoholConsump + Smoker, data = train.df, family = 'binomial')
+modD <- glm(Diabetes_binary ~ BMI * (HvyAlcoholConsump + Smoker), data = train.df, family = 'binomial')
+modE <- glm(Diabetes_binary ~ BMI + (HvyAlcoholConsump * Smoker), data = train.df, family = 'binomial')
+```
+
+```{r}
+rbind(broom::glance(modA),
+      broom::glance(modB),
+      broom::glance(modC),
+      broom::glance(modD),
+      broom::glance(modE)
+)
+```
+Modle E is the best within these models.
+
+```{r}
+coefplot::coefplot(modE)
+```
+2 features are important in modE.
+
+```{r}
+coefplot::coefplot(modD,intercept = FALSE, color = "darkgreen")
+```
+```{r}
+Xmat_A <- model.matrix(Diabetes_binary ~ BMI, data = train.df)
+Xmat_B <- model.matrix(Diabetes_binary ~ PhysActivity + DiffWalk, data = train.df)
+Xmat_C <- model.matrix(Diabetes_binary ~ BMI + HvyAlcoholConsump + Smoker, data = train.df)
+Xmat_D <- model.matrix(Diabetes_binary ~ BMI * (HvyAlcoholConsump + Smoker), data = train.df)
+Xmat_E <- model.matrix(Diabetes_binary ~ BMI + (HvyAlcoholConsump * Smoker), data = train.df)
+
+```
+
+```{r}
+info_A <- list(
+  yobs = train.df$Diabetes_binary,
+  design_matrix = Xmat_A,
+  mu_beta = 0,
+  tau_beta = 4.5
+)
+
+info_B <- list(
+  yobs = train.df$Diabetes_binary,
+  design_matrix = Xmat_B,
+  mu_beta = 0,
+  tau_beta = 4.5
+)
+
+info_C <- list(
+  yobs = train.df$Diabetes_binary,
+  design_matrix = Xmat_C,
+  mu_beta = 0,
+  tau_beta = 4.5
+)
+
+info_D <- list(
+  yobs = train.df$Diabetes_binary,
+  design_matrix = Xmat_D,
+  mu_beta = 0,
+  tau_beta = 4.5
+)
+
+info_E <- list(
+  yobs = train.df$Diabetes_binary,
+  design_matrix = Xmat_E,
+  mu_beta = 0,
+  tau_beta = 4.5
+)
+```
+
+```{r}
+logistic_logpost <- function(unknowns, my_info)
+{
+  # extract the design matrix and assign to X
+  X <- my_info$design_matrix
+  
+  # calculate the linear predictor
+  eta <- as.vector(X %*% unknowns)
+  
+  # calculate the event probability
+  mu <- boot::inv.logit(eta)
+  
+  # evaluate the log-likelihood
+  log_lik <- sum(dbinom(x = my_info$yobs,
+                        size = 1,
+                        prob = mu,
+                        log = T))
+  
+  # evaluate the log-prior
+  log_prior <- sum(dnorm(x = unknowns,
+                         mean = my_info$mu_beta,
+                         sd = my_info$tau_beta,
+                         log = T))
+  
+  # sum together
+  log_lik + log_prior
+}
+```
+
+```{r}
+my_laplace <- function(start_guess, logpost_func, ...)
+{
+  # code adapted from the `LearnBayes`` function `laplace()`
+  fit <- optim(start_guess,
+               logpost_func,
+               gr = NULL,
+               ...,
+               method = "BFGS",
+               hessian = TRUE,
+               control = list(fnscale = -1, maxit = 5001))
+  
+  mode <- fit$par
+  post_var_matrix <- -solve(fit$hessian)
+  p <- length(mode)
+  int <- p/2 * log(2 * pi) + 0.5 * log(det(post_var_matrix)) + logpost_func(mode, ...)
+  # package all of the results into a list
+  list(mode = mode,
+       var_matrix = post_var_matrix,
+       log_evidence = int,
+       converge = ifelse(fit$convergence == 0,
+                         "YES", 
+                         "NO"),
+       iter_counts = as.numeric(fit$counts[1]))
+}
+```
+
+
+```{r}
+laplace_A <- my_laplace(start_guess = rep(0, ncol(info_A$design_matrix)), 
+                        logpost_func = logistic_logpost,
+                        my_info = info_A)
+laplace_B <- my_laplace(start_guess = rep(0, ncol(info_B$design_matrix)), 
+                        logpost_func = logistic_logpost,
+                        my_info = info_B)
+laplace_C <- my_laplace(start_guess = rep(0, ncol(info_C$design_matrix)), 
+                        logpost_func = logistic_logpost,
+                        my_info = info_C)
+laplace_D <- my_laplace(start_guess = rep(0, ncol(info_D$design_matrix)), 
+                        logpost_func = logistic_logpost,
+                        my_info = info_D)
+laplace_E <- my_laplace(start_guess = rep(0, ncol(info_E$design_matrix)), 
+                        logpost_func = logistic_logpost,
+                        my_info = info_E)
+```
+
+
+```{r}
+all_mod_log_evidence <- c(laplace_A$log_evidence,
+                          laplace_B$log_evidence,
+                          laplace_C$log_evidence,
+                          laplace_D$log_evidence,
+                          laplace_E$log_evidence)
+
+mod_weights <- all_mod_log_evidence / sum(all_mod_log_evidence, na.rm = T)
+
+tibble::tibble(w = mod_weights,
+               mod_name = letters[1:5] %>% toupper()) %>%
+  ggplot(aes(x = mod_name, y = w)) +
+  geom_bar(stat = 'identity', fill = "orange", color = "purple") +
+  ylab("Weight")
+```
+
